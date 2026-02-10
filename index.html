@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee & Attendance System</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Adding basic status colors in case your style.css is missing them */
+        .success { color: #27ae60; font-weight: bold; }
+        .error { color: #e74c3c; font-weight: bold; }
+        .card { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Employee Management System</h1>
+
+    <div class="card">
+        <h2>Add Employee</h2>
+        <input type="number" id="empId" placeholder="Employee ID">
+        <input type="text" id="name" placeholder="Full Name">
+        <input type="email" id="email" placeholder="Email">
+        <input type="text" id="dept" placeholder="Department">
+        <button onclick="addEmployee()">Add Employee</button>
+        <p id="empMsg"></p>
+    </div>
+
+    <div class="card">
+        <h2>All Employees</h2>
+        <button onclick="getEmployees()">Refresh List</button>
+        <table id="employeeTable">
+            <thead>
+                <tr>
+                    <th>ID</th><th>Name</th><th>Email</th><th>Dept</th><th>Delete</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Mark Attendance</h2>
+        <input type="number" id="attEmpId" placeholder="Employee ID">
+        <input type="date" id="attDate">
+        <select id="status">
+            <option value="Present">Present</option>
+            <option value="Absent">Absent</option>
+        </select>
+        <button onclick="markAttendance()">Mark Attendance</button>
+        <p id="attMsg"></p>
+    </div>
+
+    <div class="card">
+        <h2>View Attendance</h2>
+        <input type="number" id="viewEmpId" placeholder="Employee ID">
+        <button onclick="getAttendance()">Show Attendance</button>
+        <table id="attendanceTable">
+            <thead>
+                <tr><th>Date</th><th>Status</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const API_URL = "http://127.0.0.1:8000";
+
+// Helper for UI Feedback
+function displayMsg(elId, text, isSuccess) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.textContent = text;
+    el.className = isSuccess ? "success" : "error";
+}
+
+async function addEmployee() {
+    // Correct way to get values
+    const id = document.getElementById("empId").value;
+    const fullName = document.getElementById("name").value;
+    const email = document.getElementById("email").value;
+    const dept = document.getElementById("dept").value;
+
+    if (!id || !fullName || !email || !dept) {
+        displayMsg("empMsg", "All fields are required!", false);
+        return;
+    }
+
+    const data = {
+        employeeId: parseInt(id),
+        fullName: fullName,
+        email: email,
+        department: dept
+    };
+
+    try {
+        const res = await fetch(`${API_URL}/employees`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        
+        displayMsg("empMsg", result.message || result.error || "Done", res.ok);
+        if (res.ok) getEmployees(); 
+    } catch (err) {
+        displayMsg("empMsg", "Server connection failed", false);
+    }
+}
+
+async function getEmployees() {
+    try {
+        const res = await fetch(`${API_URL}/employees`);
+        const data = await res.json();
+        const tbody = document.querySelector("#employeeTable tbody");
+        tbody.innerHTML = "";
+
+        data.forEach(emp => {
+            const row = `<tr>
+                <td>${emp.employeeId}</td>
+                <td>${emp.fullName}</td>
+                <td>${emp.email}</td>
+                <td>${emp.department}</td>
+                <td><button onclick="deleteEmployee(${emp.employeeId})">Delete</button></td>
+            </tr>`;
+            tbody.insertAdjacentHTML('beforeend', row);
+        });
+    } catch (err) {
+        console.error("Fetch error:", err);
+    }
+}
+
+async function deleteEmployee(id) {
+    if (!confirm("Delete this employee?")) return;
+    try {
+        const res = await fetch(`${API_URL}/employees/${id}`, { method: "DELETE" });
+        if (res.ok) getEmployees();
+    } catch (err) {
+        alert("Failed to delete");
+    }
+}
+
+async function markAttendance() {
+    const id = document.getElementById("attEmpId").value;
+    const date = document.getElementById("attDate").value;
+    const status = document.getElementById("status").value;
+
+    if (!id || !date) {
+        displayMsg("attMsg", "Missing ID or Date", false);
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/attendance`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ employeeId: parseInt(id), date, status })
+        });
+        const result = await res.json();
+        displayMsg("attMsg", result.message || result.error, res.ok);
+    } catch (err) {
+        displayMsg("attMsg", "Network Error", false);
+    }
+}
+
+async function getAttendance() {
+    const id = document.getElementById("viewEmpId").value;
+    if (!id) return alert("Enter Employee ID");
+
+    try {
+        const res = await fetch(`${API_URL}/attendance/${id}`);
+        const data = await res.json();
+        const tbody = document.querySelector("#attendanceTable tbody");
+        tbody.innerHTML = "";
+
+        if (data.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='2'>No records found</td></tr>";
+        } else {
+            data.forEach(rec => {
+                tbody.innerHTML += `<tr><td>${rec.date}</td><td>${rec.status}</td></tr>`;
+            });
+        }
+    } catch (err) {
+        alert("Could not load data");
+    }
+}
+
+// Automatically load employees on start
+window.onload = getEmployees;
+</script>
+
+</body>
+</html>
